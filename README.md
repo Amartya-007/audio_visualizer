@@ -1,145 +1,189 @@
-# Audio Visualizer & CNN Classifier
+# Audio CNN Visualizer
 
-A deep learning-powered audio classification system built with PyTorch and deployed on Modal. This project combines audio signal processing, convolutional neural networks, and real-time inference to classify environmental sounds from the ESC-50 dataset.
+A comprehensive deep learning system for environmental sound classification built with PyTorch and deployed on Modal. This project features a custom ResNet-based CNN architecture for classifying 50 different environmental sound categories from the ESC-50 dataset, along with a modern Next.js web interface for real-time audio analysis and visualization.
 
 ## 🎯 What This Project Does
 
-This audio visualizer performs real-time classification of environmental sounds using a custom ResNet-based CNN architecture. It processes audio files, converts them to mel-spectrograms, and provides:
+This system performs intelligent environmental sound classification using advanced deep learning techniques. It processes audio files, converts them to mel-spectrograms, and provides:
 
-- **Audio Classification**: Identifies 50 different environmental sound categories
-- **Feature Map Visualization**: Extracts and visualizes intermediate CNN representations
-- **Real-time Inference**: Fast prediction via Modal's cloud infrastructure
-- **Waveform Analysis**: Processes and analyzes audio waveforms
-- **Training Pipeline**: Complete training setup with data augmentation and monitoring
+- **🎵 Audio Classification**: Identifies 50 different environmental sound categories with confidence scores
+- **🧠 Feature Map Visualization**: Extracts and visualizes intermediate CNN layer representations
+- **☁️ Cloud Inference**: Scalable real-time prediction via Modal's GPU infrastructure  
+- **📊 Waveform Analysis**: Comprehensive audio signal processing and visualization
+- **🚀 Modern Web Interface**: Interactive Next.js frontend with real-time audio upload and visualization
+- **📈 Training Pipeline**: Complete MLOps pipeline with TensorBoard monitoring and data augmentation
 
 ## ✨ Key Features
 
-- **🧠 Deep Learning Model**: Custom ResNet-based CNN with residual blocks for robust audio classification
-- **🎵 Audio Processing**: Advanced mel-spectrogram generation with frequency/time masking augmentation
-- **☁️ Cloud Deployment**: Scalable inference using Modal's serverless GPU infrastructure
-- **📊 Training Monitoring**: TensorBoard integration for real-time training visualization
-- **🔄 Data Augmentation**: Mixup augmentation and SpecAugment for improved model generalization
-- **📈 Feature Visualization**: Extract and visualize intermediate CNN feature maps
-- **⚡ Fast Inference**: Optimized inference pipeline with batched processing
+- **🧠 Advanced CNN Architecture**: Custom ResNet-based model with residual blocks and feature map extraction
+- **🎵 Sophisticated Audio Processing**: Mel-spectrogram generation with SpecAugment and Mixup augmentation
+- **☁️ Serverless Deployment**: Auto-scaling inference using Modal's GPU infrastructure (A10G)
+- **🌐 Modern Web Interface**: Interactive Next.js application with TypeScript and Tailwind CSS
+- **📊 Training Monitoring**: Real-time TensorBoard integration with comprehensive metrics tracking
+- **🔄 Data Augmentation**: Advanced techniques including frequency/time masking and mixup
+- **📈 Feature Visualization**: Multi-layer CNN feature map extraction and visualization
+- **⚡ Optimized Inference**: Fast prediction pipeline with automatic audio preprocessing
+- **🎛️ Audio Format Support**: Compatible with WAV, MP3, FLAC and other common formats
 
 ## 🏗️ Project Structure
 
 ```text
 audio_visualizer/
-├── model.py                    # ResNet-based CNN architecture
-├── train.py                    # Training pipeline with Modal integration
-├── main.py                     # Inference server and local testing
-├── requirements.txt            # Python dependencies
-├── audio-cnn-visualizer/       # Frontend application
-│   ├── src/                    # React/Next.js source code
-│   ├── public/                 # Static assets
-│   ├── package.json            # Frontend dependencies
-│   └── ...                     # Other frontend files
-└── README.md                   # This file
+├── main.py                     # Modal inference server with FastAPI endpoints
+├── model.py                    # ResNet-based CNN architecture with residual blocks
+├── train.py                    # Complete training pipeline with Modal integration
+├── requirements.txt            # Python dependencies (torch, librosa, modal, etc.)
+├── chirpingbirds.wav          # Sample audio file for testing
+├── tensorboard_logs/          # Training logs and metrics
+│   ├── run_20250716_200823/
+│   ├── run_20250717_141137/
+│   └── run_20250717_153812/
+└── audio-cnn-visualizer/      # Next.js frontend application
+    ├── src/                   # TypeScript source code
+    │   ├── app/              # Next.js app router pages
+    │   ├── components/       # React components (Waveform, FeatureMap, etc.)
+    │   │   ├── ui/          # Reusable UI components (shadcn/ui)
+    │   │   ├── ColorScale.tsx
+    │   │   ├── FeatureMap.tsx
+    │   │   ├── LoadingAnimation.tsx
+    │   │   ├── SuccessAnimation.tsx
+    │   │   └── Waveform.tsx
+    │   ├── lib/              # Utility functions and colors
+    │   └── styles/           # Global CSS styles
+    ├── public/               # Static assets
+    
 ```
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-- Python 3.8+
-- Node.js 18+ and npm/yarn (for frontend)
-- Modal account ([sign up here](https://modal.com))
-- Audio files for testing (supports WAV, MP3, etc.)
+- **Python 3.8+** with pip
+- **Node.js 18+** and npm/yarn for the frontend
+- **Modal account** ([sign up here](https://modal.com)) for cloud deployment
+- **Audio files** for testing (WAV, MP3, FLAC supported)
 
 ### Installation
 
 1. **Clone the repository**
 
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/Amartya-007/audio_visualizer.git
    cd audio_visualizer
    ```
 
-2. **Create and activate a virtual environment**
+2. **Set up Python environment**
 
-   ```bash
+   ```powershell
+   # Create virtual environment
    python -m venv .venv
-   # On Windows:
-   .venv\Scripts\activate
-   # On macOS/Linux:
-   source .venv/bin/activate
-   ```
-
-3. **Install dependencies**
-
-   ```bash
+   
+   # Activate on Windows
+   .venv\Scripts\Activate.ps1
+   
+   # Install Python dependencies
    pip install -r requirements.txt
    ```
 
-4. **Install Modal CLI**
+3. **Install and configure Modal**
 
-   ```bash
+   ```powershell
+   # Install Modal CLI
    pip install modal
-   ```
-
-5. **Authenticate with Modal**
-
-   ```bash
+   
+   # Authenticate with Modal
    modal setup
    ```
 
-6. **Setup Frontend Application**
+4. **Set up the frontend application**
 
-   ```bash
+   ```powershell
    # Navigate to frontend directory
    cd audio-cnn-visualizer
    
-   # Install frontend dependencies
+   # Install dependencies
    npm install
-   # or
-   yarn install
+   
+   # Return to root directory
+   cd ..
    ```
 
-## 🔧 Modal Setup
+## 🔧 Usage
 
-### 1. Training Setup
+### 1. Training the Model
 
-The training script automatically sets up the ESC-50 dataset and creates necessary Modal volumes:
+Train the CNN model on the ESC-50 dataset using Modal's cloud infrastructure:
 
-```bash
-# Start training on Modal (uses A10G GPU)
+```powershell
+# Start training (automatically downloads ESC-50 dataset)
 modal run train.py
 ```
 
-### 2. Inference Setup
+**Training features:**
 
-Deploy the inference server:
+- Automatic ESC-50 dataset download and preprocessing
+- A10G GPU acceleration for fast training
+- TensorBoard logging with real-time metrics
+- Model checkpointing and volume persistence
+- Advanced data augmentation (Mixup, SpecAugment)
 
-```bash
-# Deploy inference endpoint
+### 2. Deploy Inference Server
+
+Deploy the FastAPI inference endpoint to Modal:
+
+```powershell
+# Deploy the inference server
 modal serve main.py
 ```
 
-### 3. Local Testing
+This creates a scalable inference endpoint that automatically handles:
 
-Test the inference with a local audio file:
+- Audio file preprocessing and resampling
+- Mel-spectrogram generation
+- CNN inference with feature map extraction
+- Response formatting with predictions and visualizations
 
-```bash
-# Ensure you have an audio file named 'chirpingbirds.wav' in the project directory
+### 3. Test Local Inference
+
+Test the deployed model with a sample audio file:
+
+```powershell
+# Test with the included sample file
 modal run main.py
 ```
 
-### 4. Frontend Application
+**Expected output:**
 
-Run the web interface to interact with your model:
+```text
+First 10 values: [0.0234, -0.0156, 0.0087, ...]
+Duration: 5.0
+Top predictions:
+  - Birds chirping 92.4%
+  - Wind 8.21%
+  - Water 4.36%
+```
 
-```bash
+### 4. Run the Web Interface
+
+Launch the Next.js frontend for interactive audio analysis:
+
+```powershell
 # Navigate to frontend directory
 cd audio-cnn-visualizer
 
-# Start the development server
+# Start development server
 npm run dev
-# or
-yarn dev
 
-# Open your browser to http://localhost:3000
+# Open http://localhost:3000 in your browser
 ```
+
+**Web interface features:**
+
+- choose audio files for classification
+- Real-time waveform visualization
+- CNN feature map display
+- Interactive prediction results
+- Responsive design with Tailwind CSS
 
 ## 📊 TensorBoard Monitoring
 
@@ -200,7 +244,7 @@ npm run dev
 # Upload audio files and see real-time classification and visualization
 ```
 
-### Custom Audio Classification
+### Custom Audio Classification API
 
 ```python
 import base64
@@ -211,73 +255,177 @@ import io
 # Load your audio file
 audio_data, sample_rate = sf.read("your_audio.wav")
 
-# Convert to base64
+# Convert to base64 for API transmission
 buffer = io.BytesIO()
 sf.write(buffer, audio_data, sample_rate, format="WAV")
 audio_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-# Send to inference endpoint
+# Send inference request
 payload = {"audio_data": audio_b64}
 response = requests.post("YOUR_MODAL_ENDPOINT_URL", json=payload)
 result = response.json()
 
-print("Predictions:", result["predictions"])
+# Parse results
+predictions = result["predictions"]
+feature_maps = result["visualization"]
+spectrogram = result["input_spectrogram"]
+waveform = result["waveform"]
+
+print("Top 3 Predictions:")
+for pred in predictions:
+    print(f"  {pred['class']}: {pred['confidence']:.2%}")
+```
+
+### Response Format
+
+```json
+{
+  "predictions": [
+    {"class": "Birds", "confidence": 0.8743},
+    {"class": "Wind", "confidence": 0.0821}
+  ],
+  "visualization": {
+    "layer1": {"shape": [64, 32, 32], "values": [[...]]},
+    "layer2": {"shape": [128, 16, 16], "values": [[...]]}
+  },
+  "input_spectrogram": {
+    "shape": [128, 44],
+    "values": [[...]]
+  },
+  "waveform": {
+    "values": [...],
+    "sample_rate": 44100,
+    "duration": 5.0
+  }
+}
 ```
 
 ## 🏋️ Model Architecture
 
-- **Base Architecture**: ResNet-inspired CNN with residual blocks
-- **Input**: Mel-spectrograms (128 mel bins, 1024 FFT)
-- **Layers**: 4 residual block layers with increasing channels (64→128→256→512)
-- **Output**: 50-class classification (ESC-50 categories)
-- **Regularization**: Dropout (0.5) + Label smoothing (0.1)
+### AudioCNN Architecture
+
+- **Base Architecture**: Custom ResNet-inspired CNN with residual connections
+- **Input Processing**: Mel-spectrograms (128 mel bins, 1024 FFT, 512 hop length)
+- **Sampling Rate**: 22050 Hz with frequency range 0-11025 Hz
+- **Residual Blocks**: 4 progressive layers with channel expansion (64→128→256→512)
+- **Feature Maps**: Intermediate layer visualization and extraction capability
+- **Output**: 50-class softmax classification for ESC-50 categories
+- **Regularization**: Dropout (0.5), Batch Normalization, Label Smoothing (0.1)
+
+### ResidualBlock Components
+
+- **Convolutional Layers**: 3x3 kernels with stride control
+- **Batch Normalization**: Applied after each convolution
+- **Shortcut Connections**: Identity mapping with 1x1 convolution when needed
+- **Activation**: ReLU activation functions
+- **Adaptive Pooling**: Global average pooling for final feature aggregation
 
 ## 📈 Training Configuration
 
-- **Dataset**: ESC-50 (2000 samples, 50 classes) - [View Dataset](https://github.com/karolpiczak/ESC-50)
-- **Batch Size**: 32
-- **Epochs**: 100
+### Dataset & Augmentation
+
+- **Dataset**: ESC-50 (2000 samples, 50 environmental sound classes), [ESC-50 GitHub](https://github.com/karolpiczak/ESC-50)
+- **Data Split**: Fold 1-4 for training, Fold 5 for validation
+- **Audio Format**: 44.1kHz sampling rate, mono channel conversion
+- **Augmentation**: Mixup (30% probability) + SpecAugment (frequency/time masking)
+
+### Training Hyperparameters
+
+- **Batch Size**: 32 samples per batch
+- **Epochs**: 100 training epochs
 - **Optimizer**: AdamW with weight decay (0.01)
-- **Scheduler**: OneCycleLR (max_lr=0.002)
-- **Augmentation**: Mixup (30% chance) + SpecAugment
+- **Learning Rate**: OneCycleLR scheduler (max_lr=0.002)
+- **Loss Function**: CrossEntropyLoss with label smoothing (0.1)
+- **Hardware**: Modal A10G GPU with automatic scaling
+
+### Monitoring & Logging
+
+- **TensorBoard**: Real-time loss, accuracy, and learning rate tracking
+- **Model Checkpointing**: Best validation accuracy model preservation
+- **Volume Persistence**: Automatic model and data storage on Modal volumes
 
 ## 🐛 Troubleshooting
 
-### Common Issues
+### Common Issues & Solutions
 
-1. **Modal Authentication Error**
+#### 1. **Modal Authentication Problems**
 
-   ```bash
-   modal setup
-   ```
+```powershell
+# Re-authenticate with Modal
+modal setup
+```
 
-2. **GPU Memory Issues**
-   - Reduce batch size in `train.py`
-   - Use smaller model variant
+#### 2. **GPU Memory Issues**
 
-3. **Audio File Format Issues**
-   - Ensure audio files are in supported formats (WAV, MP3, FLAC)
-   - Check sample rate compatibility
+- Reduce batch size in `train.py` (line ~200)
+- Use CPU inference by modifying device selection
+- Clear CUDA cache: `torch.cuda.empty_cache()`
 
-4. **Inference Endpoint Not Found**
-   - Ensure the inference server is deployed: `modal serve main.py`
-   - Check Modal dashboard for endpoint status
+#### 3. **Audio Format Compatibility**
 
-5. **Frontend Connection Issues**
-   - Ensure the Modal inference endpoint is running
-   - Update the API endpoint URL in the frontend configuration
-   - Check CORS settings if making cross-origin requests
+```powershell
+# Install additional audio codecs
+pip install librosa soundfile
+```
 
-6. **Node.js/npm Issues**
-   - Ensure Node.js 18+ is installed
-   - Clear npm cache: `npm cache clean --force`
-   - Delete `node_modules` and reinstall: `rm -rf node_modules && npm install`
+- Ensure audio files are in supported formats (WAV, MP3, FLAC)
+- Check sample rate (automatically resampled to 44.1kHz)
+- Verify file integrity and format
 
-## 📝 License
+#### 4. **Modal Deployment Issues**
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+```powershell
+# Check Modal app status
+modal app list
+
+# Redeploy if needed
+modal serve main.py --reload
+```
+
+#### 5. **Frontend Connection Issues**
+
+- Verify Modal inference endpoint is running
+- Update API endpoint URL in frontend configuration
+- Check browser console for CORS or network errors
+- Ensure Modal endpoint allows public access
+
+#### 6. **Package Installation Problems**
+
+```powershell
+# Clear pip cache and reinstall
+pip cache purge
+pip install -r requirements.txt --force-reinstall
+
+# For Node.js issues
+cd audio-cnn-visualizer
+rm -rf node_modules package-lock.json
+npm install
+```
+
+#### 7. **TensorBoard Access Issues**
+
+- Training logs are stored in Modal volumes
+- Use Modal dashboard to view training progress
+- Download logs locally for detailed analysis
+
+### Performance Optimization
+
+- **Inference Speed**: Use Modal's autoscaling for production loads
+- **Memory Usage**: Implement batch processing for multiple files
+- **Model Size**: Consider model quantization for edge deployment
+
+## � References & Resources
+
+- **[ESC-50 Dataset](https://github.com/karolpiczak/ESC-50)** - Environmental Sound Classification dataset
+- **[Modal Documentation](https://modal.com/docs)** - Serverless cloud computing platform
+- **[PyTorch Audio](https://pytorch.org/audio/)** - Audio processing with PyTorch
+- **[ResNet Paper](https://arxiv.org/abs/1512.03385)** - Deep Residual Learning for Image Recognition
+- **[Next.js Documentation](https://nextjs.org/docs)** - React framework for production
+- **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS framework
 
 ## 🤝 Contributing
+
+We welcome contributions! Please follow these steps:
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -285,9 +433,10 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📚 References
+### Development Guidelines
 
-- [ESC-50 Dataset](https://github.com/karolpiczak/ESC-50)
-- [Modal Documentation](https://modal.com/docs)
-- [PyTorch Audio](https://pytorch.org/audio/)
-- [ResNet Paper](https://arxiv.org/abs/1512.03385)
+- Follow PEP 8 for Python code
+- Use TypeScript for frontend development
+- Add type hints and docstrings
+- Test your changes thoroughly
+- Update documentation as needed
