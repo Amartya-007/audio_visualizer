@@ -7,6 +7,7 @@ import torch.nn as nn
 import torchaudio.transforms as T
 import torch
 from pydantic import BaseModel
+from fastapi import HTTPException
 import soundfile as sf
 import librosa
 
@@ -14,15 +15,21 @@ from model import AudioCNN
 
 app = modal.App("audio-cnn-inference")
 
-image = (modal.Image.debian_slim()
-         .pip_install_from_requirements("requirements.txt")
-         .apt_install(["libsndfile1"])
-         .add_local_python_source("model"))
+image = (
+    modal.Image.debian_slim()
+    .pip_install_from_requirements("requirements.txt")
+    .apt_install(["libsndfile1"])
+    .add_local_python_source("model")
+)
 
 model_volume = modal.Volume.from_name("esc-model")
 
 
 class AudioProcessor:
+    """
+    Handles preprocessing of audio data into Mel Spectrogram format.
+    """
+
     def __init__(self):
         self.transform = nn.Sequential(
             T.MelSpectrogram(
@@ -36,91 +43,139 @@ class AudioProcessor:
             T.AmplitudeToDB()
         )
 
-    def process_audio_chunk(self, audio_data):
-        waveform = torch.from_numpy(audio_data).float()
+    def process_audio_chunk(self, audio_data: np.ndarray) -> torch.Tensor:
+        """
+        Convert raw audio data into a normalized Mel Spectrogram tensor.
 
-        waveform = waveform.unsqueeze(0)
+        Args:
+            audio_data (np.ndarray): Audio waveform
 
-        spectrogram = self.transform(waveform)
-
-        return spectrogram.unsqueeze(0)
+        Returns:
+            torch.Tensor: Processed spectrogram
+        """
+        try:
+            waveform = torch.from_numpy(audio_data).float().unsqueeze(0)
+            spectrogram = self.transform(waveform)
+            return spectrogram.unsqueeze(0)
+        except Exception as e:
+            raise RuntimeError(
+                "Failed to process audio into spectrogram") from e
 
 
 class InferenceRequest(BaseModel):
+    """
+    Schema for inference API input
+    """
     audio_data: str
 
 
 @app.cls(image=image, gpu="A10G", volumes={"/models": model_volume}, scaledown_window=15)
 class AudioClassifier:
+    """
+    Modal class for loading and serving the audio classification model
+    """
+
     @modal.enter()
     def load_model(self):
+        """
+        Load model and preprocessing components at container start
+        """
         print("Loading models on enter")
         self.device = torch.device(
-            'cuda' if torch.cuda.is_available() else 'cpu')
+            "cuda" if torch.cuda.is_available() else "cpu")
 
-        checkpoint = torch.load('/models/best_model.pth',
-                                map_location=self.device)
-        self.classes = checkpoint['classes']
+        try:
+            checkpoint = torch.load(
+                "/models/best_model.pth", map_location=self.device)
+            self.classes = checkpoint["classes"]
 
-        self.model = AudioCNN(num_classes=len(self.classes))
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.model.to(self.device)
-        self.model.eval()
+            self.model = AudioCNN(num_classes=len(self.classes))
+            self.model.load_state_dict(checkpoint["model_state_dict"])
+            self.model.to(self.device)
+            self.model.eval()
 
-        self.audio_processor = AudioProcessor()
-        print("Model loaded on enter")
+            self.audio_processor = AudioProcessor()
+            print("Model loaded successfully")
+        except Exception as e:
+            raise RuntimeError("Failed to load model checkpoint") from e
 
     @modal.fastapi_endpoint(method="POST")
     def inference(self, request: InferenceRequest):
-        audio_bytes = base64.b64decode(request.audio_data)
+        """
+        Inference API endpoint: receives base64 audio, classifies it, returns predictions + visualization.
 
-        audio_data, sample_rate = sf.read(io.BytesIO(audio_bytes), dtype="float32")
+        Args:
+            request (InferenceRequest): Audio input
 
+        Returns:
+            dict: Prediction results, spectrogram, waveform, feature maps
+        """
+        try:
+            audio_bytes = base64.b64decode(request.audio_data)
+            audio_data, sample_rate = sf.read(
+                io.BytesIO(audio_bytes), dtype="float32")
+        except Exception:
+            raise HTTPException(
+                status_code=400, detail="Invalid or corrupted audio data")
+
+        # Convert to mono if stereo
         if audio_data.ndim > 1:
             audio_data = np.mean(audio_data, axis=1)
 
-        if sample_rate != 44100:
-            audio_data = librosa.resample(
-                y=audio_data, orig_sr=sample_rate, target_sr=44100)
+        try:
+            if sample_rate != 44100:
+                audio_data = librosa.resample(
+                    y=audio_data, orig_sr=sample_rate, target_sr=44100)
+        except Exception:
+            raise HTTPException(
+                status_code=500, detail="Error while resampling audio")
 
-        spectrogram = self.audio_processor.process_audio_chunk(audio_data)
-        spectrogram = spectrogram.to(self.device)
+        try:
+            spectrogram = self.audio_processor.process_audio_chunk(audio_data)
+            spectrogram = spectrogram.to(self.device)
 
-        with torch.no_grad():
-            output, feature_maps = self.model(
-                spectrogram, return_feature_maps=True)
+            with torch.no_grad():
+                output, feature_maps = self.model(
+                    spectrogram, return_feature_maps=True)
+                output = torch.nan_to_num(output)
+                probabilities = torch.softmax(output, dim=1)
+                top3_probs, top3_indicies = torch.topk(probabilities[0], 3)
 
-            output = torch.nan_to_num(output)
-            probabilities = torch.softmax(output, dim=1)
-            top3_probs, top3_indicies = torch.topk(probabilities[0], 3)
+                predictions = [
+                    {"class": self.classes[idx.item()],
+                     "confidence": prob.item()}
+                    for prob, idx in zip(top3_probs, top3_indicies)
+                ]
+        except Exception:
+            raise HTTPException(
+                status_code=500, detail="Model inference failed")
 
-            predictions = [{"class": self.classes[idx.item()], "confidence": prob.item()}
-                           for prob, idx in zip(top3_probs, top3_indicies)]
+        # Visualize feature maps
+        viz_data = {}
+        for name, tensor in feature_maps.items():
+            if tensor.dim() == 4:
+                aggregated_tensor = torch.mean(tensor, dim=1)
+                squeezed_tensor = aggregated_tensor.squeeze(0)
+                numpy_array = squeezed_tensor.cpu().numpy()
+                clean_array = np.nan_to_num(numpy_array)
+                viz_data[name] = {
+                    "shape": list(clean_array.shape),
+                    "values": clean_array.tolist()
+                }
 
-            viz_data = {}
-            for name, tensor in feature_maps.items():
-                if tensor.dim() == 4:  # [batch_size, channels, height, width]
-                    aggregated_tensor = torch.mean(tensor, dim=1)
-                    squeezed_tensor = aggregated_tensor.squeeze(0)
-                    numpy_array = squeezed_tensor.cpu().numpy()
-                    clean_array = np.nan_to_num(numpy_array)
-                    viz_data[name] = {
-                        "shape": list(clean_array.shape),
-                        "values": clean_array.tolist()
-                    }
+        spectrogram_np = spectrogram.squeeze(0).squeeze(0).cpu().numpy()
+        clean_spectrogram = np.nan_to_num(spectrogram_np)
 
-            spectrogram_np = spectrogram.squeeze(0).squeeze(0).cpu().numpy()
-            clean_spectrogram = np.nan_to_num(spectrogram_np)
+        # Downsample waveform if too long
+        max_samples = 8000
+        waveform_sample_rate = 44100
+        waveform_data = (
+            audio_data[:: len(audio_data) // max_samples]
+            if len(audio_data) > max_samples
+            else audio_data
+        )
 
-            max_samples = 8000
-            waveform_sample_rate = 44100
-            if len(audio_data) > max_samples:
-                step = len(audio_data) // max_samples
-                waveform_data = audio_data[::step]
-            else:
-                waveform_data = audio_data
-
-        response = {
+        return {
             "predictions": predictions,
             "visualization": viz_data,
             "input_spectrogram": {
@@ -134,12 +189,20 @@ class AudioClassifier:
             }
         }
 
-        return response
-
 
 @app.local_entrypoint()
 def main():
-    audio_data, sample_rate = sf.read("chirpingbirds.wav")
+    """
+    Local test: sends a WAV file to inference endpoint and prints predictions
+    """
+    try:
+        audio_data, sample_rate = sf.read("chirpingbirds.wav")
+    except FileNotFoundError:
+        print("Audio file not found.")
+        return
+    except RuntimeError as e:
+        print(f"Error reading WAV file: {e}")
+        return
 
     buffer = io.BytesIO()
     sf.write(buffer, audio_data, sample_rate, format="WAV")
@@ -149,15 +212,22 @@ def main():
     server = AudioClassifier()
     url = server.inference.get_web_url()
     if url is None:
-        raise ValueError("Inference endpoint URL is None. Cannot make POST request.")
-    response = requests.post(url, json=payload)
-    response.raise_for_status()
+        raise RuntimeError("Failed to get web URL for inference")
 
-    result = response.json()
+    try:
+        response = requests.post(url, json=payload)
+        response.raise_for_status()
+        result = response.json()
+    except requests.RequestException as e:
+        print(f"HTTP Request failed: {e}")
+        return
+    except ValueError:
+        print("Failed to parse JSON from server.")
+        return
 
     waveform_info = result.get("waveform", {})
     if waveform_info:
-        values = waveform_info.get("values", {})
+        values = waveform_info.get("values", [])
         print(f"First 10 values: {[round(v, 4) for v in values[:10]]}...")
         print(f"Duration: {waveform_info.get('duration', 0)}")
 
