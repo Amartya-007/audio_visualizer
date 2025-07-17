@@ -234,7 +234,7 @@ print("Predictions:", result["predictions"])
 
 ## 📈 Training Configuration
 
-- **Dataset**: ESC-50 (2000 samples, 50 classes)
+- **Dataset**: ESC-50 (2000 samples, 50 classes) - [View Dataset](https://github.com/karolpiczak/ESC-50)
 - **Batch Size**: 32
 - **Epochs**: 100
 - **Optimizer**: AdamW with weight decay (0.01)
