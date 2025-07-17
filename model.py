@@ -74,7 +74,7 @@ class AudioCNN(nn.Module):
         self.fc = nn.Linear(512, num_classes)
 
     def forward(self, x, return_feature_maps=False):
-        # * The forward pass can operate in two modes: standard classification or feature map extraction
+        # * if we dont want to see feature maps, we just do a standard forward pass
         if not return_feature_maps:
             # * Standard forward pass for training and inference
             x = self.conv1(x)
@@ -93,7 +93,8 @@ class AudioCNN(nn.Module):
             x = self.fc(x)
             return x
         else:
-            # * Forward pass that also returns intermediate feature maps
+            #! THIS WILL SHOW THE FEATURE MAPS
+            # * if want to see feature maps, we store them in a dictionary 
             feature_maps = {}
             x = self.conv1(x)
             feature_maps["conv1"] = x

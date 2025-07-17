@@ -1,6 +1,5 @@
-
-#* ================= Import necessary libraries =================
 from pathlib import Path
+import sys
 import pandas as pd
 import numpy as np
 
@@ -14,35 +13,27 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import OneCycleLR
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from model import AudioCNN # * Import the model definition from a local file
 
-# * =============================================================
+from model import AudioCNN
 
-# * Initialize a Modal App for distributed computing
 app = modal.App("audio-cnn")
 
-# ! Define the Modal Image for the remote environment
-# * This sets up the Docker image with necessary dependencies and data
 image = (modal.Image.debian_slim()
          .pip_install_from_requirements("requirements.txt")
          .apt_install(["wget", "unzip", "ffmpeg", "libsndfile1"])
          .run_commands([
-             # * Download and set up the ESC-50 dataset
              "cd /tmp && wget https://github.com/karolpiczak/ESC-50/archive/master.zip -O esc50.zip",
              "cd /tmp && unzip esc50.zip",
              "mkdir -p /opt/esc50-data",
              "cp -r /tmp/ESC-50-master/* /opt/esc50-data/",
              "rm -rf /tmp/esc50.zip /tmp/ESC-50-master"
          ])
-         .add_local_python_source("model"))  # * Include the local model.py file
+         .add_local_python_source("model"))
 
-
-# * Define Modal Volumes for persistent storage of data and models
 volume = modal.Volume.from_name("esc50-data", create_if_missing=True)
 model_volume = modal.Volume.from_name("esc-model", create_if_missing=True)
 
 
-# * Custom PyTorch Dataset for the ESC-50 dataset
 class ESC50Dataset(Dataset):
     def __init__(self, data_dir, metadata_file, split="train", transform=None):
         super().__init__()
@@ -51,37 +42,28 @@ class ESC50Dataset(Dataset):
         self.split = split
         self.transform = transform
 
-        # * Split data into training and validation sets based on fold number
         if split == 'train':
-            # * Use folds 1-4 for training
             self.metadata = self.metadata[self.metadata['fold'] != 5]
         else:
-            # * Use fold 5 for validation/testing
             self.metadata = self.metadata[self.metadata['fold'] == 5]
 
-        # * Map class names to integer labels
         self.classes = sorted(self.metadata['category'].unique())
         self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
         self.metadata['label'] = self.metadata['category'].map(
             self.class_to_idx)
 
     def __len__(self):
-        # * Returns the total number of samples in the dataset
         return len(self.metadata)
 
     def __getitem__(self, idx):
-        # * Retrieves a single sample from the dataset
         row = self.metadata.iloc[idx]
         audio_path = self.data_dir / "audio" / row['filename']
 
-        # * Load audio waveform
         waveform, sample_rate = torchaudio.load(audio_path)
 
-        # * Convert stereo to mono by averaging channels if necessary
         if waveform.shape[0] > 1:
             waveform = torch.mean(waveform, dim=0, keepdim=True)
 
-        # * Apply transformations (e.g., to create a spectrogram)
         if self.transform:
             spectrogram = self.transform(waveform)
         else:
@@ -90,40 +72,30 @@ class ESC50Dataset(Dataset):
         return spectrogram, row['label']
 
 
-# * Mixup data augmentation function
 def mixup_data(x, y):
-    # * Generates a mixing coefficient from a beta distribution
     lam = np.random.beta(0.2, 0.2)
 
     batch_size = x.size(0)
-    # * Randomly shuffle indices to mix samples
     index = torch.randperm(batch_size).to(x.device)
 
-    # * Create mixed input and corresponding labels
     mixed_x = lam * x + (1 - lam) * x[index, :]
     y_a, y_b = y, y[index]
     return mixed_x, y_a, y_b, lam
 
 
-# * Loss function for mixup
 def mixup_criterion(criterion, pred, y_a, y_b, lam):
-    # * Calculates the loss as a weighted average of the losses for the mixed samples
     return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)
 
 
-# * Define the main training function to be run on a Modal GPU instance
 @app.function(image=image, gpu="A10G", volumes={"/data": volume, "/models": model_volume}, timeout=60 * 60 * 3)
 def train():
-    # * Setup TensorBoard for logging
     from datetime import datetime
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_dir = f'/models/tensorboard_logs/run_{timestamp}'
     writer = SummaryWriter(log_dir)
 
-    # * Define the path to the dataset within the Modal container
     esc50_dir = Path("/opt/esc50-data")
 
-    # * Define audio transformations for training data (with augmentation)
     train_transform = nn.Sequential(
         T.MelSpectrogram(
             sample_rate=22050,
@@ -134,11 +106,10 @@ def train():
             f_max=11025
         ),
         T.AmplitudeToDB(),
-        T.FrequencyMasking(freq_mask_param=30),  # * Augmentation
-        T.TimeMasking(time_mask_param=80)      # * Augmentation
+        T.FrequencyMasking(freq_mask_param=30),
+        T.TimeMasking(time_mask_param=80)
     )
 
-    # * Define audio transformations for validation data (no augmentation)
     val_transform = nn.Sequential(
         T.MelSpectrogram(
             sample_rate=22050,
@@ -151,7 +122,6 @@ def train():
         T.AmplitudeToDB()
     )
 
-    # * Create dataset instances
     train_dataset = ESC50Dataset(
         data_dir=esc50_dir, metadata_file=esc50_dir / "meta" / "esc50.csv", split="train", transform=train_transform)
 
@@ -161,21 +131,17 @@ def train():
     print(f"Training samples: {len(train_dataset)}")
     print(f"Val samples: {len(val_dataset)}")
 
-    # * Create DataLoader instances for batching and shuffling
     train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     test_dataloader = DataLoader(val_dataset, batch_size=32, shuffle=False)
 
-    # * Set up the model, device, and training parameters
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = AudioCNN(num_classes=len(train_dataset.classes))
     model.to(device)
 
-    #! Hyperparameters
     num_epochs = 100
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     optimizer = optim.AdamW(model.parameters(), lr=0.0005, weight_decay=0.01)
 
-    # * Learning rate scheduler for better convergence
     scheduler = OneCycleLR(
         optimizer,
         max_lr=0.002,
@@ -187,51 +153,45 @@ def train():
     best_accuracy = 0.0
 
     print("Starting training")
-    # * Main training loop
     for epoch in range(num_epochs):
-        model.train()  # * Set model to training mode
+        model.train()
         epoch_loss = 0.0
 
-        # * Progress bar for visual feedback
         progress_bar = tqdm(
             train_dataloader, desc=f'Epoch {epoch+1}/{num_epochs}')
         for data, target in progress_bar:
             data, target = data.to(device), target.to(device)
 
-            # * Apply mixup augmentation with a 30% chance
             if np.random.random() > 0.7:
                 data, target_a, target_b, lam = mixup_data(data, target)
                 output = model(data)
                 loss = mixup_criterion(
                     criterion, output, target_a, target_b, lam)
             else:
-                # * Standard forward pass and loss calculation
                 output = model(data)
                 loss = criterion(output, target)
 
-            # * Backpropagation
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            scheduler.step()  # * Update learning rate
+            scheduler.step()
 
             epoch_loss += loss.item()
             progress_bar.set_postfix({'Loss': f'{loss.item():.4f}'})
 
-        # * Log training metrics to TensorBoard
         avg_epoch_loss = epoch_loss / len(train_dataloader)
         writer.add_scalar('Loss/Train', avg_epoch_loss, epoch)
         writer.add_scalar(
             'Learning_Rate', optimizer.param_groups[0]['lr'], epoch)
 
-        # * Validation loop after each epoch
-        model.eval()  # * Set model to evaluation mode
+        # Validation after each epoch
+        model.eval()
 
         correct = 0
         total = 0
         val_loss = 0
 
-        with torch.no_grad():  # * Disable gradient calculation for validation
+        with torch.no_grad():
             for data, target in test_dataloader:
                 data, target = data.to(device), target.to(device)
                 outputs = model(data)
@@ -242,7 +202,6 @@ def train():
                 total += target.size(0)
                 correct += (predicted == target).sum().item()
 
-        # * Calculate and log validation metrics
         accuracy = 100 * correct / total
         avg_val_loss = val_loss / len(test_dataloader)
 
@@ -252,7 +211,6 @@ def train():
         print(
             f'Epoch {epoch+1} Loss: {avg_epoch_loss:.4f}, Val Loss: {avg_val_loss:.4f}, Accuracy: {accuracy:.2f}%')
 
-        # * Save the model if it has the best validation accuracy so far
         if accuracy > best_accuracy:
             best_accuracy = accuracy
             torch.save({
@@ -267,7 +225,6 @@ def train():
     print(f'Training completed! Best accuracy: {best_accuracy:.2f}%')
 
 
-# * Local entrypoint to run the training function remotely on Modal
 @app.local_entrypoint()
 def main():
     train.remote()

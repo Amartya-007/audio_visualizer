@@ -74,8 +74,7 @@ class AudioClassifier:
     def inference(self, request: InferenceRequest):
         audio_bytes = base64.b64decode(request.audio_data)
 
-        audio_data, sample_rate = sf.read(
-            io.BytesIO(audio_bytes), dtype="float32")
+        audio_data, sample_rate = sf.read(io.BytesIO(audio_bytes), dtype="float32")
 
         if audio_data.ndim > 1:
             audio_data = np.mean(audio_data, axis=1)
@@ -149,10 +148,8 @@ def main():
 
     server = AudioClassifier()
     url = server.inference.get_web_url()
-    
     if url is None:
-        raise ValueError("Inference endpoint URL is None. Make sure the server is running and get_web_url() returns a valid URL.")
-    
+        raise ValueError("Inference endpoint URL is None. Cannot make POST request.")
     response = requests.post(url, json=payload)
     response.raise_for_status()
 
@@ -166,4 +163,4 @@ def main():
 
     print("Top predictions:")
     for pred in result.get("predictions", []):
-        print(f"  -{pred['class ']} {pred['confidence']:0.2%}")
+        print(f"  - {pred['class']} {pred['confidence']:0.2%}")
